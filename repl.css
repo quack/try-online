@@ -1,6 +1,10 @@
 body {
   background-color: #2C3E50;
-  overflow: hidden;
+  overflow-x: hidden;
+}
+
+#quack-repl-stdout {
+  white-space: pre;
 }
 
 .quack-repl-line, #quack-repl-stdin, #quack-repl-stdin-input {

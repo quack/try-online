@@ -7,7 +7,7 @@ define('PARSER', 'parser');
 
 function import($module, $file)
 {
-  require_once '../' . $module . '/' . $file . '.php';
+  require_once __DIR__ . '/../' . $module . '/' . $file . '.php';
 }
 
 /* Lexer */

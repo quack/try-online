@@ -18,6 +18,21 @@ var QuackRepl = (function () {
     };
   };
 
+  QuackRepl.prototype.ajax = function (text) {
+    var xhr = new XMLHttpRequest();
+    var that = this;
+    xhr.open('GET', './api.php?action=' + btoa(text) );
+    xhr.send(null);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState === 4) {
+        xhr.responseText.split('\n').forEach(function (line) {
+          that.input.value = "";
+          that.print(line);
+        });
+      }
+    };
+  };
+
   QuackRepl.prototype.send = function (text) {
     text = text.trim();
 
@@ -27,6 +42,9 @@ var QuackRepl = (function () {
         break;
       default:
         this.print('<span class="quack-repl-name">Quack&gt;</span> ' + text);
+        if (text !== '') {
+          this.ajax(text);
+        }
         break;
     }
 
@@ -57,6 +75,9 @@ var QuackRepl = (function () {
     ].forEach(function (line) {
       that.print(line);
     });
+
+    that.input.focus();
+    that.input.selectionStart = that.input.selectionEnd = that.input.value.length;
   }
 
   return QuackRepl;
