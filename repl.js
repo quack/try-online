@@ -16,6 +16,17 @@ var QuackRepl = (function () {
         that.send(that.input.value);
       }
     };
+    this.input.onkeyup = function (e) {
+      var key = e.which || e.keyCode;
+      if (key === 38) {
+        var last = that.history[that.history.length - 1 - that.level];
+        if (last) {
+          that.input.value = last;
+        }
+
+        that.level = Math.min(that.level + 1, that.history.length);
+      }
+    }
   };
 
   QuackRepl.prototype.ajax = function (text) {
@@ -29,22 +40,27 @@ var QuackRepl = (function () {
           that.input.value = "";
           that.print(line);
         });
+        that.scrollBottom();
       }
     };
   };
 
   QuackRepl.prototype.send = function (text) {
     text = text.trim();
+    this.history = this.history || [];
+    this.level = 0;
 
     switch (text) {
       case ":clear":
         this.stdout.innerHTML = "";
+        this.history.push(':clear');
         break;
       default:
         this.print('<span class="quack-repl-name">Quack&gt;</span> ' + text);
         if (text !== '') {
           this.ajax(text);
         }
+        this.history.push(text);
         break;
     }
 

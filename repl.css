@@ -8,7 +8,6 @@ body {
 }
 
 .quack-repl-line, #quack-repl-stdin, #quack-repl-stdin-input {
-  font-weight: bold;
   color: white;
   font-size: 14px;
   font-family: "Ubuntu mono", "Consolas", "Monospace";
@@ -23,6 +22,7 @@ body {
 
 .quack-repl-name {
   color: #22A7F0;
+  font-weight: bold;
 }
 
 #quack-repl-stdin-input {

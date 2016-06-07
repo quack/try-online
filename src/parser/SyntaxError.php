@@ -6,17 +6,17 @@ use \Exception;
 use \QuackCompiler\Lexer\Tag;
 use \QuackCompiler\Lexer\Token;
 
-define('BEGIN_ORANGE', "\033[01;31m");
-define('END_ORANGE', "\033[0m");
+define('BEGIN_ORANGE', '<span style="color: #F39C12;">');
+define('END_ORANGE', '</span>');
 
-define('BEGIN_GREEN', "\033[01;33m");
-define('END_GREEN', "\033[0m");
+define('BEGIN_GREEN', '<span style="color: #E74C3C;">');
+define('END_GREEN', '</span>');
 
-define('BEGIN_BG_RED', "\033[01;41m");
-define('END_BG_RED', "\033[0m");
+define('BEGIN_BG_RED', '<span style="color: #2ECC71;">');
+define('END_BG_RED', '</span>');
 
-define('BEGIN_BOLD', "\033[1m");
-define('END_BOLD', "\033[0m");
+define('BEGIN_BOLD', '<b>');
+define('END_BOLD', '</b>');
 
 class SyntaxError extends Exception
 {

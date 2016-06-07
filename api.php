@@ -12,6 +12,7 @@ if (isset($_GET['action'])) {
   switch ($action) {
     case ':license':
       echo file_get_contents('./LICENSE');
+      break;
     default:
       $lexer = new Tokenizer($action);
       $parser = new TokenReader($lexer);
