@@ -32,7 +32,7 @@ var QuackRepl = (function () {
   QuackRepl.prototype.ajax = function (text) {
     var xhr = new XMLHttpRequest();
     var that = this;
-    xhr.open('GET', './api.php?action=' + btoa(text) );
+    xhr.open('GET', './api.php?action=' + encodeURIComponent(btoa(text)));
     xhr.send(null);
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {

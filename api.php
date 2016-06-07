@@ -7,7 +7,7 @@ use \QuackCompiler\Parser\SyntaxError;
 use \QuackCompiler\Parser\TokenReader;
 
 if (isset($_GET['action'])) {
-  $action = trim(base64_decode($_GET['action']));
+  $action = trim(rawurldecode(base64_decode($_GET['action'])));
 
   switch ($action) {
     case ':license':
