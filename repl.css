@@ -1,0 +1,31 @@
+body {
+  background-color: #2C3E50;
+  overflow: hidden;
+}
+
+.quack-repl-line, #quack-repl-stdin, #quack-repl-stdin-input {
+  font-weight: bold;
+  color: white;
+  font-size: 14px;
+  font-family: "Ubuntu mono", "Consolas", "Monospace";
+  height: 18px;
+  line-height: 18px;
+}
+
+#quack-repl-stdin {
+  background-color: #2C3E50;
+  width: 100%;
+}
+
+.quack-repl-name {
+  color: #22A7F0;
+}
+
+#quack-repl-stdin-input {
+  background-color: #2C3E50;
+  outline: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 90%;
+}
