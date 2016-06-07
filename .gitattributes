@@ -1,0 +1,3 @@
+*.qk linguist-language=OCaml
+*.qkt linguist-language=OCaml
+*.php linguist-language=Hack
