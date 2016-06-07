@@ -55,6 +55,8 @@ var QuackRepl = (function () {
         this.stdout.innerHTML = "";
         this.history.push(':clear');
         break;
+      case 'show c':
+        text = ':license'
       default:
         this.print('<span class="quack-repl-name">Quack&gt;</span> ' + text);
         if (text !== '') {
@@ -83,7 +85,7 @@ var QuackRepl = (function () {
 
   QuackRepl.prototype.welcome = function () {
     var that = this;
-    [ "Quack · Copyright (C) 2016 Marcelo Camargo",
+    [ "Quack · Copyright (C) 2016 Marcelo Camargo &lt;marcelocamargo@linuxmail.org&gt;",
       "This program comes with ABSOLUTELY NO WARRANTY.",
       "This is free software, and you are welcome to redistribute it",
       "under certain conditions; type 'show c' for details.",
@@ -104,5 +106,3 @@ var QuackRepl = (function () {
   module.repl.configureStdin();
   module.repl.welcome();
 })(window);
-
-

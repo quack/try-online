@@ -1,0 +1,14 @@
+require once 'src.toolkit.QuackToolkit'
+
+open QuackCompiler.Lexer.Tokenizer
+open QuackCompiler.Parser.{ SyntaxError; TokenReader }
+
+if not isset _GET{ 'action' } ^
+let action :- _GET{ 'action' } |> base64_decode |> trim.
+if action = ':license' [
+  print file_get_contents[ './LICENSE' ]
+  break
+]
+let lexer :- #Tokenizer with { action }
+let parser :- #TokenReader with { lexer }
+try [ parser:parser! parser:dump_ast! ] rescue print
