@@ -17,7 +17,7 @@
     <div id="quack-repl-stdout"></div>
     <div id="quack-repl-stdin">
       <span class="quack-repl-name">Quack&gt;</span>
-      <input id="quack-repl-stdin-input" value='print 1 + 1'></div>
+      <input id="quack-repl-stdin-input" value='do write["Hello World!"]'></div>
     </div>
   </body>
   <script type="text/javascript" src="./repl.js"></script>
