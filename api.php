@@ -19,7 +19,7 @@ if (isset($_GET['action'])) {
 
       try {
         $parser->parse();
-        $parser->dumpAst();
+        echo $parser->format();
       } catch (SyntaxError $e) {
         echo $e;
       }

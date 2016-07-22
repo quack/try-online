@@ -1,117 +1,78 @@
 <?php
-
+/**
+ * Quack Compiler and toolkit
+ * Copyright (C) 2016 Marcelo Camargo <marcelocamargo@linuxmail.org> and
+ * CONTRIBUTORS.
+ *
+ * This file is part of Quack.
+ *
+ * Quack is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Quack is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Quack.  If not, see <http://www.gnu.org/licenses/>.
+ */
 namespace QuackCompiler\Parser;
 
 use \QuackCompiler\Lexer\Tag;
 
 class TokenChecker
 {
-  private $parser;
+    private $parser;
 
-  function __construct(TokenReader $parser)
-  {
-    $this->parser = $parser;
-  }
+    public function __construct(TokenReader $parser)
+    {
+        $this->parser = $parser;
+    }
 
-  function startsTopStmt()
-  {
-    return $this->startsStmt()
-        || $this->startsClassDeclStmt()
-        || $this->parser->is(Tag::T_STRUCT)
-        || $this->parser->is(Tag::T_FN)
-        || $this->parser->is(Tag::T_MODULE)
-        || $this->parser->is(Tag::T_OPEN)
-        || $this->parser->is(Tag::T_CONST);
-  }
+    public function startsInnerStmt()
+    {
+        $possible_inner_stmts = [
+            Tag::T_BLUEPRINT,
+            Tag::T_STRUCT,
+            Tag::T_FN,
+            Tag::T_ENUM
+        ];
 
-  function startsInnerStmt()
-  {
-    return $this->startsStmt()
-        || $this->parser->is(Tag::T_FN)
-        || $this->startsClassDeclStmt();
-  }
+        return in_array($this->parser->lookahead->getTag(), $possible_inner_stmts, true)
+            || $this->startsStmt();
+    }
 
-  function startsStmt()
-  {
-    return $this->parser->is(Tag::T_IF)       // Done
-        || $this->parser->is(Tag::T_LET)      // Done
-        || $this->parser->is(Tag::T_WHILE)    // Partially done
-        || $this->parser->is(Tag::T_DO)       // Done
-        || $this->parser->is(Tag::T_FOR)      //
-        || $this->parser->is(Tag::T_FOREACH)  // Done
-        || $this->parser->is(Tag::T_SWITCH)   // Done
-        || $this->parser->is(Tag::T_TRY)      // Done
-        || $this->parser->is(Tag::T_MATCH)    //
-        || $this->parser->is(Tag::T_BREAK)    // Done
-        || $this->parser->is(Tag::T_CONTINUE) // Done
-        || $this->parser->is(Tag::T_GOTO)     // Done
-        || $this->parser->is(Tag::T_GLOBAL)   // Done
-        || $this->parser->is(Tag::T_STATIC)   //
-        || $this->parser->is(Tag::T_RAISE)    // Done
-        || $this->parser->is(Tag::T_PRINT)    // Done
-        || $this->parser->is(Tag::T_OUT)      // Done
-        || $this->parser->is('^')             // Done
-        || $this->parser->is('[')             // Done
-        || $this->parser->is(':-')            // Done
-        || $this->startsExpr();               // Done
-  }
+    public function startsStmt()
+    {
+        static $possible_stmts = [
+            Tag::T_IF,
+            Tag::T_LET,
+            Tag::T_CONST,
+            Tag::T_WHILE,
+            Tag::T_DO,
+            Tag::T_FOR,
+            Tag::T_FOREACH,
+            Tag::T_SWITCH,
+            Tag::T_TRY,
+            Tag::T_BREAK,
+            Tag::T_CONTINUE,
+            Tag::T_GOTO,
+            Tag::T_GLOBAL,
+            Tag::T_RAISE,
+            Tag::T_BEGIN,
+            '^',
+            ':-'
+        ];
 
-  function startsExpr()
-  {
-    return $this->parser->is(Tag::T_INTEGER)
-        || $this->parser->is(Tag::T_DOUBLE)
-        || $this->parser->is(Tag::T_FN)
-        || $this->parser->is(Tag::T_STATIC)
-        || $this->parser->is(Tag::T_REQUIRE)
-        || $this->parser->is(Tag::T_INCLUDE)
-        || $this->parser->is(Tag::T_IDENT)
-        || $this->parser->isOperator()
-        || $this->parser->is('{')
-        || $this->parser->is('(');
-  }
+        $next_tag = $this->parser->lookahead->getTag();
+        return in_array($next_tag, $possible_stmts, true);
+    }
 
-  function startsClassDeclStmt()
-  {
-    return $this->parser->is(Tag::T_FINAL)
-        || $this->parser->is(Tag::T_MODEL)
-        || $this->parser->is(Tag::T_CLASS)
-        || $this->parser->is(Tag::T_PIECE)
-        || $this->parser->is(Tag::T_INTF);
-  }
-
-  function startsParameter()
-  {
-    return $this->parser->is('...')
-        || $this->parser->is('*')
-        || $this->parser->is(Tag::T_IDENT);
-  }
-
-  function startsCase()
-  {
-    return $this->parser->is(Tag::T_CASE)
-        || $this->parser->is(Tag::T_ELSE);
-  }
-
-  function isMethodModifier()
-  {
-    return $this->parser->is(Tag::T_MY)
-        || $this->parser->is(Tag::T_PROTECTED)
-        || $this->parser->is(Tag::T_STATIC)
-        || $this->parser->is(Tag::T_MODEL)
-        || $this->parser->is(Tag::T_FINAL);
-  }
-
-  function startsClassStmt()
-  {
-    return $this->parser->is(Tag::T_FN)
-        || $this->parser->is(Tag::T_CONST)
-        || $this->parser->is(Tag::T_OPEN)
-        || $this->parser->is(Tag::T_IDENT)
-        || $this->isMethodModifier();
-  }
-
-  function isEoF()
-  {
-    return $this->parser->lookahead->getTag() === 0;
-  }
+    public function isEoF()
+    {
+        return $this->parser->lookahead->getTag() === 0;
+    }
 }

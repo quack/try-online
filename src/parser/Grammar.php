@@ -1,5 +1,24 @@
 <?php
-
+/**
+ * Quack Compiler and toolkit
+ * Copyright (C) 2016 Marcelo Camargo <marcelocamargo@linuxmail.org> and
+ * CONTRIBUTORS.
+ *
+ * This file is part of Quack.
+ *
+ * Quack is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Quack is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Quack.  If not, see <http://www.gnu.org/licenses/>.
+ */
 namespace QuackCompiler\Parser;
 
 use \QuackCompiler\Lexer\Tag;
@@ -10,699 +29,766 @@ use \QuackCompiler\Ast\Expr\ArrayPairExpr;
 use \QuackCompiler\Ast\Stmt\BlockStmt;
 use \QuackCompiler\Ast\Stmt\BreakStmt;
 use \QuackCompiler\Ast\Stmt\CaseStmt;
-use \QuackCompiler\Ast\Stmt\ClassStmt;
+use \QuackCompiler\Ast\Stmt\BlueprintStmt;
+use \QuackCompiler\Ast\Stmt\ExtensionStmt;
 use \QuackCompiler\Ast\Stmt\ConstStmt;
 use \QuackCompiler\Ast\Stmt\ContinueStmt;
 use \QuackCompiler\Ast\Stmt\FnStmt;
 use \QuackCompiler\Ast\Stmt\DoWhileStmt;
 use \QuackCompiler\Ast\Stmt\ElifStmt;
+use \QuackCompiler\Ast\Stmt\EnumStmt;
 use \QuackCompiler\Ast\Stmt\ExprStmt;
 use \QuackCompiler\Ast\Stmt\ForeachStmt;
-use \QuackCompiler\Ast\Stmt\GlobalStmt;
-use \QuackCompiler\Ast\Stmt\GotoStmt;
+use \QuackCompiler\Ast\Stmt\ForStmt;
 use \QuackCompiler\Ast\Stmt\IfStmt;
-use \QuackCompiler\Ast\Stmt\IntfStmt;
 use \QuackCompiler\Ast\Stmt\LabelStmt;
 use \QuackCompiler\Ast\Stmt\LetStmt;
 use \QuackCompiler\Ast\Stmt\ModuleStmt;
 use \QuackCompiler\Ast\Stmt\OpenStmt;
-use \QuackCompiler\Ast\Stmt\OutStmt;
-use \QuackCompiler\Ast\Stmt\PieceStmt;
 use \QuackCompiler\Ast\Stmt\PrintStmt;
-use \QuackCompiler\Ast\Stmt\PropertyStmt;
+use \QuackCompiler\Ast\Stmt\MemberStmt;
 use \QuackCompiler\Ast\Stmt\RaiseStmt;
-use \QuackCompiler\Ast\Stmt\RescueStmt;
 use \QuackCompiler\Ast\Stmt\ReturnStmt;
-use \QuackCompiler\Ast\Stmt\StructStmt;
 use \QuackCompiler\Ast\Stmt\SwitchStmt;
 use \QuackCompiler\Ast\Stmt\TryStmt;
 use \QuackCompiler\Ast\Stmt\WhileStmt;
-use \QuackCompiler\Ast\Stmt\YieldStmt;
 
-use \QuackCompiler\Ast\Helper\Param;
+use \QuackCompiler\Ast\Expr\PrefixExpr;
 
 class Grammar
 {
-  public $parser;
-  public $checker;
+    public $parser;
+    public $checker;
 
-  function __construct(TokenReader $parser)
-  {
-    $this->parser = $parser;
-    $this->checker = new TokenChecker($parser);
-  }
-
-  function start()
-  {
-    return iterator_to_array($this->_topStmtList());
-  }
-
-  function _topStmtList()
-  {
-    while ($this->checker->startsTopStmt()) {
-      yield $this->_topStmt();
+    public function __construct(TokenReader $parser)
+    {
+        $this->parser = $parser;
+        $this->checker = new TokenChecker($parser);
     }
 
-    if (!$this->checker->isEoF()) {
-      throw (new SyntaxError)
-        -> expected ('statement')
-        -> found    ($this->parser->lookahead)
-        -> on       ($this->parser->position())
-        -> source   ($this->parser->input);
-    }
-  }
-
-  function _innerStmtList()
-  {
-    while ($this->checker->startsInnerStmt()) {
-      yield $this->_innerStmt();
-    }
-  }
-
-  function _classStmtList()
-  {
-    while ($this->checker->startsClassStmt()) {
-      yield $this->_classStmt();
-    }
-  }
-
-  function _arrayPairList()
-  {
-    while (!$this->parser->is('}')) {
-      $left = $this->_expr();
-      $right = NULL;
-
-      if ($this->checker->startsExpr()) {
-        $right = $this->_expr();
-      }
-
-      if (!$this->parser->is('}')) {
-        $this->parser->match(';');
-      }
-
-      yield new ArrayPairExpr($left, $right);
-    }
-  }
-
-  function _stmt()
-  {
-    $branch_table = [
-      Tag::T_IF       => '_ifStmt',
-      Tag::T_LET      => '_letStmt',
-      Tag::T_WHILE    => '_whileStmt',
-      Tag::T_DO       => '_doWhileStmt',
-      Tag::T_FOR      => '_forStmt',
-      Tag::T_FOREACH  => '_foreachStmt',
-      Tag::T_SWITCH   => '_switchStmt',
-      Tag::T_TRY      => '_tryStmt',
-      Tag::T_BREAK    => '_breakStmt',
-      Tag::T_CONTINUE => '_continueStmt',
-      Tag::T_GOTO     => '_gotoStmt',
-      Tag::T_YIELD    => '_yieldStmt',
-      Tag::T_GLOBAL   => '_globalStmt',
-      Tag::T_RAISE    => '_raiseStmt',
-      Tag::T_PRINT    => '_printStmt',
-      Tag::T_OUT      => '_outStmt',
-      '^'             => '_returnStmt',
-      '['             => '_blockStmt',
-      ':-'            => '_labelStmt'
-    ];
-
-    foreach ($branch_table as $token => $action) if ($this->parser->is($token)) {
-      return call_user_func([$this, $action]);
+    public function start()
+    {
+        return iterator_to_array($this->_topStmtList());
     }
 
-    // Differ function expression from function statement
-    // Look at the first character after T_FN. When not '{', it is a statement
-    if ($this->parser->is(Tag::T_FN) && $this->parser->input->preview(1) !== '{') {
-      return $this->_fnStmt();
+    public function _topStmtList()
+    {
+        while (!$this->checker->isEoF()) {
+            yield $this->_topStmt();
+        }
     }
 
-    // Jump to expressions as fallback
-    if ($this->checker->startsExpr()) {
-      $expression = $this->_expr();
-      $this->parser->match('.');
-      return new ExprStmt($expression);
+    public function _innerStmtList()
+    {
+        while ($this->checker->startsInnerStmt()) {
+            yield $this->_innerStmt();
+        }
     }
 
-    throw (new SyntaxError)
-      -> expected ('statement')
-      -> found    ($this->parser->lookahead)
-      -> on       ($this->parser->position())
-      -> source   ($this->parser->input);
-  }
-
-  function _blockStmt()
-  {
-    $this->parser->match('[');
-    $body = iterator_to_array($this->_innerStmtList());
-    $this->parser->match(']');
-
-    return new BlockStmt($body);
-  }
-
-  function _ifStmt()
-  {
-    $this->parser->match(Tag::T_IF);
-    $condition = $this->_expr();
-    $body = $this->_stmt();
-    $elif = iterator_to_array($this->_elifList());
-    $else = $this->_optElse();
-
-    return new IfStmt($condition, $body, $elif, $else);
-  }
-
-  function _letStmt()
-  {
-    $this->parser->match(Tag::T_LET);
-    $name = $this->identifier();
-    $this->parser->match(':-');
-    $value = $this->_expr();
-    $this->parser->match('.');
-
-    return new LetStmt($name, $value);
-  }
-
-  function _whileStmt()
-  {
-    $this->parser->match(Tag::T_WHILE);
-    $condition = $this->_expr();
-    $body = $this->_stmt();
-
-    return new WhileStmt($condition, $body);
-  }
-
-  function _forStmt()
-  {
-    throw new \Exception('TODO. Open issue to check the best syntax');
-  }
-
-  function _foreachStmt()
-  {
-    $this->parser->match(Tag::T_FOREACH);
-    $key = NULL;
-
-    if ($this->parser->is(Tag::T_ATOM)) {
-      $key = $this->parser->consumeAndFetch();
+    public function _blueprintStmtList()
+    {
+        while (!$this->checker->isEoF()) {
+            switch ($this->parser->lookahead->getTag()) {
+                case Tag::T_FN:
+                case Tag::T_CONST:
+                case Tag::T_OPEN:
+                case Tag::T_MEMBER:
+                    yield $this->_blueprintStmt();
+                    continue 2;
+                default:
+                    break 2;
+            }
+        }
     }
 
-    ($by_reference = $this->parser->is('*')) && /* then */ $this->parser->consume();
-    $alias = $this->identifier();
-    $this->parser->match(Tag::T_IN);
-    $iterable = $this->_expr();
-    $body = $this->_stmt();
+    public function _arrayPairList()
+    {
+        while (!$this->parser->is('}')) {
+            $left = $this->_expr();
+            $right = null;
 
-    return new ForeachStmt($by_reference, $key, $alias, $iterable, $body);
-  }
+            if ($this->parser->is('->')) {
+                $this->parser->consume();
+                $right = $this->_expr();
+            }
 
-  function _switchStmt()
-  {
-    $this->parser->match(Tag::T_SWITCH);
-    $value = $this->_expr();
-    $this->parser->match('[');
-    $cases = iterator_to_array($this->_caseStmtList());
-    $this->parser->match(']');
+            if (!$this->parser->is('}')) {
+                $this->parser->match(';');
+            }
 
-    return new SwitchStmt($value, $cases);
-  }
+            yield new ArrayPairExpr($left, $right);
+        }
 
-  function _tryStmt()
-  {
-    $this->parser->match(Tag::T_TRY);
-    $this->parser->match('[');
-    $body = iterator_to_array($this->_innerStmtList());
-    $this->parser->match(']');
-    $rescues = iterator_to_array($this->_rescueStmtList());
-    $finally = $this->_optFinally();
-
-    return new TryStmt($body, $rescues, $finally);
-  }
-
-  function _doWhileStmt()
-  {
-    $this->parser->match(Tag::T_DO);
-    $body = $this->_stmt();
-    $this->parser->match(Tag::T_WHILE);
-    $condition = $this->_expr();
-
-    return new DoWhileStmt($condition, $body);
-  }
-
-  function _breakStmt()
-  {
-    $this->parser->match(Tag::T_BREAK);
-    $expression = NULL;
-    if ($this->checker->startsExpr()) {
-      $expression = $this->_expr();
+        $this->parser->match('}');
     }
 
-    return new BreakStmt($expression);
-  }
+    public function _stmt()
+    {
+        $branch_table = [
+            Tag::T_IF       => '_ifStmt',
+            Tag::T_LET      => '_letStmt',
+            Tag::T_CONST    => '_constStmt',
+            Tag::T_WHILE    => '_whileStmt',
+            Tag::T_DO       => '_exprStmt',
+            Tag::T_FOR      => '_forStmt',
+            Tag::T_FOREACH  => '_foreachStmt',
+            Tag::T_SWITCH   => '_switchStmt',
+            Tag::T_TRY      => '_tryStmt',
+            Tag::T_BREAK    => '_breakStmt',
+            Tag::T_CONTINUE => '_continueStmt',
+            Tag::T_RAISE    => '_raiseStmt',
+            Tag::T_BEGIN    => '_blockStmt',
+            '^'             => '_returnStmt',
+            ':-'            => '_labelStmt'
+        ];
 
-  function _continueStmt()
-  {
-    $this->parser->match(Tag::T_CONTINUE);
-    $expression = NULL;
-    if ($this->checker->startsExpr()) {
-      $expression = $this->_expr();
+        foreach ($branch_table as $token => $action) {
+            if ($this->parser->is($token)) {
+                $first_class_stmt = $this->{$action}();
+
+                // Syntactic sugar to allow post-conditionals for statements
+                if ($this->parser->is(Tag::T_WHEN) || $this->parser->is(Tag::T_UNLESS)) {
+                    $lexeme = $this->parser->consumeAndFetch()->lexeme;
+                    $condition = $this->_expr();
+
+                    return new IfStmt(
+                        $lexeme !== 'unless'
+                            ? $condition
+                            : new PrefixExpr(new Token(Tag::T_NOT), $condition),
+                        $first_class_stmt,
+                        [],
+                        null
+                    );
+                }
+
+                return $first_class_stmt;
+            }
+        }
+
+        throw new SyntaxError([
+            'expected' => 'statement',
+            'found'    => $this->parser->lookahead,
+            'parser'   => $this->parser
+        ]);
     }
 
-    return new ContinueStmt($expression);
-  }
+    public function _exprStmt()
+    {
+        $this->parser->match(Tag::T_DO);
 
-  function _gotoStmt()
-  {
-    $this->parser->match(Tag::T_GOTO);
-    $label = $this->identifier();
-    return new GotoStmt($label);
-  }
+        $expr_list = [$this->_expr()];
 
-  function _yieldStmt()
-  {
-    $this->parser->match(Tag::T_YIELD);
-    $expression = $this->_expr();
+        while ($this->parser->is(',')) {
+            $this->parser->consume();
+            $expr_list[] = $this->_expr();
+        }
 
-    return new YieldStmt($expression);
-  }
-
-  function _globalStmt()
-  {
-    $this->parser->match(Tag::T_GLOBAL);
-    $variable = $this->identifier();
-    return new GlobalStmt($variable);
-  }
-
-  function _raiseStmt()
-  {
-    $this->parser->match(Tag::T_RAISE);
-    $expression = $this->_expr();
-
-    return new RaiseStmt($expression);
-  }
-
-  function _printStmt()
-  {
-    $this->parser->match(Tag::T_PRINT);
-    $expression = $this->_expr();
-
-    return new PrintStmt($expression);
-  }
-
-  function _outStmt()
-  {
-    $this->parser->match(Tag::T_OUT);
-    $expression = $this->_expr();
-
-    return new OutStmt($expression);
-  }
-
-  function _returnStmt()
-  {
-    $this->parser->match('^');
-    $expression = NULL;
-
-    if ($this->parser->is('.')) {
-      $this->parser->match('.');
-      goto ret;
+        return new ExprStmt($expr_list);
     }
 
-    if ($this->checker->startsExpr()) {
-      $expression = $this->_expr();
-      $this->parser->match('.');
+    public function _blockStmt()
+    {
+        $this->parser->match(Tag::T_BEGIN);
+        $body = iterator_to_array($this->_innerStmtList());
+        $this->parser->match(Tag::T_END);
+
+        return new BlockStmt($body);
     }
 
-    ret:
-    return new ReturnStmt($expression);
-  }
+    public function _ifStmt()
+    {
+        $this->parser->match(Tag::T_IF);
+        $condition = $this->_expr();
+        $body = iterator_to_array($this->_innerStmtList());
+        $elif = iterator_to_array($this->_elifList());
+        $else = $this->_optElse();
+        $this->parser->match(Tag::T_END);
 
-  function _labelStmt()
-  {
-    $this->parser->match(':-');
-    $label_name = $this->identifier();
-
-    return new LabelStmt($label_name);
-  }
-
-  function _elifList()
-  {
-    while ($this->parser->is(Tag::T_ELIF)) {
-      $this->parser->consume();
-      $condition = $this->_expr();
-      $body = $this->_stmt();
-      yield new ElifStmt($condition, $body);
-    }
-  }
-
-  function _optElse()
-  {
-    if (!$this->parser->is(Tag::T_ELSE)) {
-      return NULL;
+        return new IfStmt($condition, $body, $elif, $else);
     }
 
-    $this->parser->consume();
-    return $this->_stmt();
-  }
+    public function _letStmt()
+    {
+        $this->parser->match(Tag::T_LET);
+        $definitions = [];
 
-  function _topStmt()
-  {
-    if ($this->checker->startsStmt())          return $this->_stmt();
-    if ($this->checker->startsClassDeclStmt()) return $this->_classDeclStmt();
-    if ($this->parser->is(Tag::T_STRUCT))      return $this->_structDeclStmt();
-    if ($this->parser->is(Tag::T_FN))          return $this->_fnStmt();
-    if ($this->parser->is(Tag::T_MODULE))      return $this->_moduleStmt();
-    if ($this->parser->is(Tag::T_OPEN))        return $this->_openStmt();
-    if ($this->parser->is(Tag::T_CONST))       return $this->_constStmt();
-  }
+        // First definition is required (without comma)
+        // I could just use a goto, but, Satan would want my soul...
+        $name = $this->identifier();
+        $this->parser->match(':-');
+        $value = $this->_expr();
+        $definitions[$name] = $value;
 
-  function _innerStmt()
-  {
-    if ($this->checker->startsStmt())          return $this->_stmt();
-    if ($this->parser->is(Tag::T_FN))          return $this->_fnStmt();
-    if ($this->checker->startsClassDeclStmt()) return $this->_classDeclStmt();
-    if ($this->parser->is(Tag::T_STRUCT))      return $this->_structDeclStmt();
-  }
+        while ($this->parser->is(',')) {
+            $this->parser->consume();
+            $name = $this->identifier();
+            $this->parser->match(':-');
+            $value = $this->_expr();
+            $definitions[$name] = $value;
+        }
 
-  function _classStmt()
-  {
-    if ($this->parser->is(Tag::T_CONST)) return $this->_constStmt();
-    if ($this->parser->is(Tag::T_OPEN))  return $this->_openStmt(); // TODO: Replace by traits
-    if ($this->parser->is(Tag::T_FN))    return $this->_fnStmt();
-    if ($this->parser->is(Tag::T_IDENT)) return $this->_property();
-
-    if ($this->checker->isMethodModifier()) {
-      $modifiers = [];
-      while ($this->checker->isMethodModifier()) {
-        $modifiers[] = $this->parser->consumeAndFetch()->lexeme;
-      }
-
-      if ($this->parser->is(Tag::T_FN))    return $this->_fnStmt($modifiers);
-      if ($this->parser->is(Tag::T_IDENT)) return $this->_property($modifiers);
-    }
-  }
-
-  function _property($modifiers = [])
-  {
-    $name = $this->identifier();
-    $value = NULL;
-
-    if ($this->parser->is(':-')) {
-      $this->parser->consume();
-      $value = $this->identifier(); // TODO: Change for _staticScalar()
+        return new LetStmt($definitions);
     }
 
-    return new PropertyStmt($name, $value, $modifiers);
-  }
+    public function _whileStmt()
+    {
+        $this->parser->match(Tag::T_WHILE);
+        $condition = $this->_expr();
+        $body = iterator_to_array($this->_innerStmtList());
+        $this->parser->match(Tag::T_END);
 
-  function _classDeclStmt() {
-    $category = 'class';
-    $extends = NULL;
-    $implements = [];
-
-    switch ($this->parser->lookahead->getTag()) {
-      case Tag::T_MODEL:
-        $category = 'model';
-        break;
-      case Tag::T_FINAL:
-        $category = 'final';
-        break;
-      case Tag::T_INTF:
-        return $this->_intfStmt();
-      case Tag::T_PIECE:
-        return $this->_pieceStmt();
+        return new WhileStmt($condition, $body);
     }
 
-    $this->parser->consume();
-    $class_name = $this->identifier();
+    public function _forStmt()
+    {
+        $this->parser->match(Tag::T_FOR);
+        $variable = $this->identifier();
+        $this->parser->match(Tag::T_FROM);
+        $from = $this->_expr();
+        $this->parser->match(Tag::T_TO);
+        $to = $this->_expr();
+        $by = null;
 
-    if ($this->parser->is(':')) {
-      $this->parser->consume();
-      $extends = $this->qualifiedName();
+        if ($this->parser->is(Tag::T_BY)) {
+            $this->parser->consume();
+            $by = $this->_expr();
+        }
+
+        $body = iterator_to_array($this->_innerStmtList());
+        $this->parser->match(Tag::T_END);
+
+        return new ForStmt($variable, $from, $to, $by, $body);
     }
 
-    if ($this->parser->is('#')) {
-      do {
+    public function _foreachStmt()
+    {
+        $key = null;
+        $by_reference = false;
+        $this->parser->match(Tag::T_FOREACH);
+
+        if ($this->parser->is(Tag::T_IDENT)) {
+            $alias = $this->identifier();
+
+            if ($this->parser->is('->')) {
+                $this->parser->consume();
+                $key = $alias;
+
+                ($by_reference = $this->parser->is('*')) && /* then */ $this->parser->consume();
+                $alias = $this->identifier();
+            }
+        } else {
+            ($by_reference = $this->parser->is('*')) && /* then */ $this->parser->consume();
+            $alias = $this->identifier();
+        }
+
+        $this->parser->match(Tag::T_IN);
+        $iterable = $this->_expr();
+        $body = iterator_to_array($this->_innerStmtList());
+        $this->parser->match(Tag::T_END);
+
+        return new ForeachStmt($by_reference, $key, $alias, $iterable, $body);
+    }
+
+    public function _switchStmt()
+    {
+        $this->parser->match(Tag::T_SWITCH);
+        $value = $this->_expr();
+        $cases = iterator_to_array($this->_caseStmtList());
+        $this->parser->match(Tag::T_END);
+
+        return new SwitchStmt($value, $cases);
+    }
+
+    public function _tryStmt()
+    {
+        $this->parser->match(Tag::T_TRY);
+        $body = iterator_to_array($this->_innerStmtList());
+        $rescues = iterator_to_array($this->_rescueStmtList());
+        $finally = $this->_optFinally();
+        $this->parser->match(Tag::T_END);
+
+        return new TryStmt($body, $rescues, $finally);
+    }
+
+    public function _breakStmt()
+    {
+        $this->parser->match(Tag::T_BREAK);
+        $expression = $this->_optExpr();
+        return new BreakStmt($expression);
+    }
+
+    public function _continueStmt()
+    {
+        $this->parser->match(Tag::T_CONTINUE);
+        $expression = $this->_optExpr();
+        return new ContinueStmt($expression);
+    }
+
+    public function _raiseStmt()
+    {
+        $this->parser->match(Tag::T_RAISE);
+        $expression = $this->_expr();
+
+        return new RaiseStmt($expression);
+    }
+
+    public function _returnStmt()
+    {
+        $this->parser->match('^');
+        $expression = $this->_optExpr();
+
+        return new ReturnStmt($expression);
+    }
+
+    public function _labelStmt()
+    {
+        $this->parser->match(':-');
+        $label_name = $this->identifier();
+
+        return new LabelStmt($label_name);
+    }
+
+    public function _elifList()
+    {
+        while ($this->parser->is(Tag::T_ELIF)) {
+            $this->parser->consume();
+            $condition = $this->_expr();
+            $body = iterator_to_array($this->_innerStmtList());
+            yield new ElifStmt($condition, $body);
+        }
+    }
+
+    public function _optElse()
+    {
+        if (!$this->parser->is(Tag::T_ELSE)) {
+            return null;
+        }
+
         $this->parser->consume();
-        $implements[] = $this->qualifiedName();
-      } while ($this->parser->is(';'));
+        return $this->_stmt();
     }
 
-    $this->parser->match('[');
-    $body = iterator_to_array($this->_classStmtList());
-    $this->parser->match(']');
+    public function _topStmt()
+    {
+        $branch_table = [
+            Tag::T_BLUEPRINT => '_blueprintDeclStmt',
+            Tag::T_FN        => '_fnStmt',
+            Tag::T_MODULE    => '_moduleStmt',
+            Tag::T_OPEN      => '_openStmt',
+            Tag::T_ENUM      => '_enumStmt',
+            Tag::T_EXTENSION => '_extensionDeclStmt'
+        ];
 
-    return new ClassStmt($category, $class_name, $extends, $implements, $body);
-  }
+        $next_tag = $this->parser->lookahead->getTag();
 
-  function _intfStmt()
-  {
-    $this->parser->match(Tag::T_INTF);
-    $intf_name = $this->identifier();
-    $extends = [];
+        return array_key_exists($next_tag, $branch_table)
+            ? call_user_func([$this, $branch_table[$next_tag]])
+            : $this->_stmt();
+    }
 
-    if ($this->parser->is(':')) {
-      do {
+    public function _innerStmt()
+    {
+        $branch_table = [
+            Tag::T_FN        => '_fnStmt',
+            Tag::T_BLUEPRINT => '_blueprintDeclStmt',
+            Tag::T_ENUM      => '_enumStmt'
+        ];
+
+        $next_tag = $this->parser->lookahead->getTag();
+
+        return array_key_exists($next_tag, $branch_table)
+            ? call_user_func([$this, $branch_table[$next_tag]])
+            : $this->_stmt();
+    }
+
+    public function _blueprintStmt()
+    {
+        $branch_table = [
+            Tag::T_OPEN   => '_openStmt',
+            Tag::T_FN     => '_fnStmt',
+            Tag::T_MEMBER => '_memberStmt'
+        ];
+
+        return call_user_func([
+            $this,
+            $branch_table[$this->parser->lookahead->getTag()]
+        ]);
+    }
+
+    public function _memberStmt()
+    {
+        $this->parser->match(Tag::T_MEMBER);
+        $definitions = [];
+
+        $name = $this->identifier();
+        $value = null;
+
+        if ($this->parser->is(':-')) {
+            $this->parser->consume();
+            $value = $this->_expr();
+        }
+
+        $definitions[$name] = $value;
+
+        while ($this->parser->is(',')) {
+            $this->parser->consume();
+            $name = $this->identifier();
+            $value = null;
+
+            if ($this->parser->is(':-')) {
+                $this->parser->consume();
+                $value = $this->_expr();
+            }
+
+            $definitions[$name] = $value;
+        }
+
+        return new MemberStmt($definitions);
+    }
+
+    public function _enumStmt()
+    {
+        $this->parser->match(Tag::T_ENUM);
+        $entries = [];
+        $name = $this->identifier();
+
+        while ($this->parser->is(Tag::T_IDENT)) {
+            $entries[] = $this->identifier();
+        }
+
+        $this->parser->match(Tag::T_END);
+
+        return new EnumStmt($name, $entries);
+    }
+
+    public function _extensionDeclStmt()
+    {
+        $appliesTo = [];
+        $appliesToRegexes = [];
+        $implements = [];
+
+        $this->parser->match(Tag::T_EXTENSION);
+        $this->parser->match(Tag::T_FOR);
+
+        do {
+            if ($this->parser->is(Tag::T_REGEX)) {
+                $appliesToRegexes[] = $this->parser->consumeAndFetch();
+            } else {
+                $appliesTo[] = $this->qualifiedName();
+            }
+
+            if ($this->parser->is(';')) {
+                $this->parser->consume();
+            } else {
+                break;
+            }
+        } while (true);
+
+        if ($this->parser->is('#')) {
+            do {
+                $this->parser->consume();
+                $implements[] = $this->qualifiedName();
+            } while ($this->parser->is(';'));
+        }
+
+        $body = iterator_to_array($this->_blueprintStmtList());
+        $this->parser->match(Tag::T_END);
+
+        return new ExtensionStmt($appliesTo, $appliesToRegexes, $implements, $body);
+    }
+
+    public function _blueprintDeclStmt()
+    {
+        $extends = null;
+        $implements = [];
+
+        $this->parser->match(Tag::T_BLUEPRINT);
+        $blueprint_name = $this->identifier();
+
+        if ($this->parser->is(':')) {
+            $this->parser->consume();
+            $extends = $this->qualifiedName();
+        }
+
+        if ($this->parser->is('#')) {
+            do {
+                $this->parser->consume();
+                $implements[] = $this->qualifiedName();
+            } while ($this->parser->is(';'));
+        }
+
+        $body = iterator_to_array($this->_blueprintStmtList());
+        $this->parser->match(Tag::T_END);
+
+        return new BlueprintStmt($blueprint_name, $extends, $implements, $body);
+    }
+
+    public function _fnStmt()
+    {
+        $by_reference = false;
+
+        $this->parser->match(Tag::T_FN);
+
+        if ($this->parser->is('*')) {
+            $this->parser->consume();
+            $by_reference = true;
+        }
+
+        $name = $this->identifier();
+        $parameters = $this->_parameters();
+
+        $body = iterator_to_array($this->_innerStmtList());
+        $this->parser->match(Tag::T_END);
+
+        return new FnStmt($name, $by_reference, $body, $parameters);
+    }
+
+    public function _moduleStmt()
+    {
+        $this->parser->match(Tag::T_MODULE);
+        return new ModuleStmt($this->qualifiedName());
+    }
+
+    public function _openStmt()
+    {
+        $this->parser->match(Tag::T_OPEN);
+        $type = null;
+        if ($this->parser->is(Tag::T_CONST) || $this->parser->is(Tag::T_FN)) {
+            $type = $this->parser->consumeAndFetch();
+        }
+
+        $name = $this->parser->is('.') ? [$this->parser->consumeAndFetch()->getTag()] : [];
+        $name[] = $this->qualifiedName();
+        $alias = null;
+        $subprops = null;
+
+        if ($this->parser->is(Tag::T_AS)) {
+            $this->parser->consume();
+            $alias = $this->identifier();
+        } elseif ($this->parser->is('{')) {
+            $this->parser->consume();
+            $subprops[] = $this->identifier();
+
+            if ($this->parser->is(';')) {
+                do {
+                    $this->parser->match(';');
+                    $subprops[] = $this->identifier();
+                } while ($this->parser->is(';'));
+            }
+
+            $this->parser->match('}');
+        }
+
+        return new OpenStmt($name, $alias, $type, $subprops);
+    }
+
+    public function _constStmt()
+    {
+        $this->parser->match(Tag::T_CONST);
+        $definitions = [];
+
+        $name = $this->identifier();
+        $this->parser->match(':-');
+        $value = $this->_expr();
+        $definitions[$name] = $value;
+
+        while ($this->parser->is(',')) {
+            $this->parser->consume();
+            $name = $this->identifier();
+            $this->parser->match(':-');
+            $value = $this->_expr();
+            $definitions[$name] = $value;
+        }
+
+        return new ConstStmt($definitions);
+    }
+
+    public function _parameters()
+    {
+        $parameters = [];
+
+        if ($this->parser->is('!')) {
+            $this->parser->consume();
+            return $parameters;
+        }
+
+        $this->parser->match('[');
+
+        while (!$this->parser->is(']')) {
+            $parameters[] = $this->_parameter();
+
+            if ($this->parser->is(';')) {
+                $this->parser->consume();
+            } else {
+                break;
+            }
+        }
+
+        $this->parser->match(']');
+        return $parameters;
+    }
+
+    public function _parameter()
+    {
+        $ellipsis = false;
+        $by_reference = false;
+
+        if ($ellipsis = $this->parser->is('...')) {
+            $this->parser->consume();
+        }
+
+        if ($by_reference = $this->parser->is('*')) {
+            $this->parser->consume();
+        }
+
+        $name = $this->identifier();
+
+        return [
+            'name' => $name,
+            'by_reference' => $by_reference,
+            'ellipsis' => $ellipsis
+        ];
+    }
+
+    public function _caseStmtList()
+    {
+        $cases = [Tag::T_CASE, Tag::T_ELSE];
+
+        while (in_array($this->parser->lookahead->getTag(), $cases, true)) {
+            $is_else = $this->parser->is(Tag::T_ELSE);
+            $this->parser->consume();
+            $value = $is_else ? null : $this->_expr();
+            $body = iterator_to_array($this->_innerStmtList());
+
+            yield new CaseStmt($value, $body, $is_else);
+        }
+    }
+
+    public function _rescueStmtList()
+    {
+        while ($this->parser->is(Tag::T_RESCUE)) {
+            $this->parser->consume();
+            $this->parser->match('[');
+            $exception_class = $this->qualifiedName();
+            $variable = $this->identifier();
+            $this->parser->match(']');
+            $body = iterator_to_array($this->_innerStmtList());
+
+            yield [
+                "exception_class" => $exception_class,
+                "variable" => $variable,
+                "body" => $body
+            ];
+        }
+    }
+
+    public function _optFinally()
+    {
+        if ($this->parser->is(Tag::T_FINALLY)) {
+            $this->parser->consume();
+            $body = iterator_to_array($this->_innerStmtList());
+            return $body;
+        }
+
+        return null;
+    }
+
+    public function _name()
+    {
+        $name = $this->parser->lookahead;
+        $this->parser->match(Tag::T_IDENT);
+        return $name;
+    }
+
+    public function _optExpr()
+    {
+        return $this->_expr(0, true);
+    }
+
+    public function _expr($precedence = 0, $opt = false)
+    {
+        $token = $this->parser->lookahead;
+        $prefix = $this->parser->prefixParseletForToken($token);
+
+        if (is_null($prefix)) {
+            if (!$opt) {
+                throw new SyntaxError([
+                    'expected' => 'expression',
+                    'found'    => $token,
+                    'parser'   => $this->parser
+                ]);
+            }
+
+            return null;
+        }
+
+        // We consume the token only when ensure it has a parselet, thus,
+        // avoiding to rollback in the tape
         $this->parser->consume();
-        $extends[] = $this->qualifiedName();
-      } while ($this->parser->is(';'));
+        $left = $prefix->parse($this, $token);
+
+        // Where clause
+        if ($this->parser->is(Tag::T_WHERE)) {
+            $this->appendWhere($left);
+        }
+
+        while ($precedence < $this->getPrecedence()) {
+            $token = $this->parser->consumeAndFetch();
+            $infix = $this->parser->infixParseletForToken($token);
+            $left = $infix->parse($this, $left, $token);
+        }
+
+        return $left;
     }
 
-    $this->parser->match('[');
-    $body = iterator_to_array($this->_classStmtList());
-    $this->parser->match(']');
-
-    return new IntfStmt($intf_name, $extends, $body);
-  }
-
-  function _pieceStmt()
-  {
-    $this->parser->match(Tag::T_PIECE);
-    $piece_name = $this->identifier();
-    $this->parser->match('[');
-    $body = iterator_to_array($this->_classStmtList());
-    $this->parser->match(']');
-
-    return new PieceStmt($piece_name, $body);
-  }
-
-  function _structDeclStmt()
-  {
-    $interfaces = [];
-
-    $this->parser->match(Tag::T_STRUCT);
-
-    if ($this->parser->is(':')) {
-      do {
-        $this->parser->consume();
-        $interfaces[] = $this->qualifiedName();
-      } while ($this->parser->is(';'));
+    private function getPrecedence()
+    {
+        $parser = $this->parser->infixParseletForToken($this->parser->lookahead);
+        return !is_null($parser)
+            ? $parser->getPrecedence()
+            : 0;
     }
 
-    $this->parser->match('[');
-    $body = iterator_to_array($this->_classStmtList());
-    $this->parser->match(']');
-    $name = $this->identifier();
+    /* Coproductions */
+    public function appendWhere(&$expr)
+    {
+        $this->parser->match(Tag::T_WHERE);
+        $where = [];
 
-    return new StructStmt($name, $interfaces, $body);
-  }
+        $name = $this->identifier();
+        $this->parser->match(':-');
+        $value = $this->_expr();
+        $where[$name] = $value;
 
-  function _fnStmt($modifiers = [])
-  {
-    $by_reference = false;
-    $this->parser->match(Tag::T_FN);
-    if ($this->parser->is('*')) {
-      $this->parser->consume();
-      $by_reference = true;
+        while ($this->parser->is(',')) {
+            $this->parser->consume();
+            $name = $this->identifier();
+            $this->parser->match(':-');
+            $value = $this->_expr();
+            $where[$name] = $value;
+        }
+
+        $this->parser->match(Tag::T_END);
+
+        $expr->where = $where;
     }
 
-    $name = $this->identifier();
-    $parameters = $this->_parameters();
+    public function qualifiedName()
+    {
+        $symbol_pointers = [$this->parser->match(Tag::T_IDENT)];
+        while ($this->parser->is('.')) {
+            $this->parser->consume();
+            $symbol_pointers[] = $this->parser->match(Tag::T_IDENT);
+        }
 
-    if ($this->parser->is('[')) {
-      $this->parser->match('[');
-      $body = iterator_to_array($this->_innerStmtList());
-      $this->parser->match(']');
-
-      return new FnStmt($name, $by_reference, $body, $parameters, $modifiers);
+        return array_map(function ($name) {
+            return $this->parser->resolveScope($name);
+        }, $symbol_pointers);
     }
 
-    return new FnStmt($name, $by_reference, NULL, $parameters, $modifiers);
-  }
-
-  function _moduleStmt()
-  {
-    $this->parser->match(Tag::T_MODULE);
-    return new ModuleStmt($this->qualifiedName());
-  }
-
-  function _openStmt()
-  {
-    $this->parser->match(Tag::T_OPEN);
-    $type = NULL;
-    if ($this->parser->is(Tag::T_CONST) || $this->parser->is(Tag::T_FN)) {
-      $type = $this->parser->consumeAndFetch();
+    public function identifier()
+    {
+        return $this->parser->resolveScope($this->parser->match(Tag::T_IDENT));
     }
-
-    $name = $this->parser->is('.') ? [$this->parser->consumeAndFetch()->getTag()] : [];
-    $name[] = $this->qualifiedName();
-    $alias = NULL;
-
-    if ($this->parser->is(Tag::T_AS)) {
-      $this->parser->consume();
-      $alias = $this->identifier();
-    }
-
-    return new OpenStmt($name, $alias, $type);
-  }
-
-  function _constStmt()
-  {
-    $this->parser->match(Tag::T_CONST);
-    $name = $this->identifier();
-    $this->parser->match(':-');
-    $value = $this->identifier(); // TODO: Change for _staticScalar()
-    return new ConstStmt($name, $value);
-  }
-
-  function _parameters()
-  {
-    $parameters = [];
-
-    if ($this->parser->is('!')) {
-      $this->parser->consume();
-      return $parameters;
-    }
-
-    $this->parser->match('[');
-
-    while ($this->checker->startsParameter()) {
-      $parameters[] = $this->_parameter();
-
-      if ($this->parser->is(';')) {
-        $this->parser->consume();
-      } else {
-        break;
-      }
-    }
-
-    $this->parser->match(']');
-    return $parameters;
-  }
-
-  function _parameter()
-  {
-    $ellipsis = false;
-    $by_reference = false;
-
-    if ($ellipsis = $this->parser->is('...')) {
-      $this->parser->consume();
-    }
-
-    if ($by_reference = $this->parser->is('*')) {
-      $this->parser->consume();
-    }
-
-    $name = $this->identifier();
-
-    return new Param($name, $by_reference, $ellipsis);
-  }
-
-  function _caseStmtList()
-  {
-    while ($this->checker->startsCase()) {
-      $is_else = $this->parser->is(Tag::T_ELSE);
-      $this->parser->consume();
-      $value = $is_else ? NULL : $this->_expr();
-      $body = iterator_to_array($this->_innerStmtList());
-
-      yield new CaseStmt($value, $body, $is_else);
-    }
-  }
-
-  function _rescueStmtList()
-  {
-    while ($this->parser->is(Tag::T_RESCUE)) {
-      $this->parser->consume();
-      $this->parser->match('[');
-      $exception_class = $this->qualifiedName();
-      $variable = $this->identifier();
-      $this->parser->match(']');
-      $this->parser->match('[');
-      $body = iterator_to_array($this->_innerStmtList());
-      $this->parser->match(']');
-
-      yield new RescueStmt($exception_class, $variable, $body);
-    }
-  }
-
-  function _optFinally()
-  {
-    if ($this->parser->is(Tag::T_FINALLY)) {
-      $this->parser->consume();
-      $this->parser->match('[');
-      $body = iterator_to_array($this->_innerStmtList());
-      $this->parser->match(']');
-
-      return $body;
-    }
-
-    return NULL;
-  }
-
-  function _name()
-  {
-    $name = $this->parser->lookahead;
-    $this->parser->match(Tag::T_IDENT);
-    return $name;
-  }
-
-  function _expr($precedence = 0)
-  {
-    $token = $this->parser->consumeAndFetch();
-    $prefix = $this->parser->prefixParseletForToken($token);
-
-    if (is_null($prefix)) {
-      throw (new SyntaxError)
-        -> expected ('expression')
-        -> found    ($token)
-        -> on       ($this->parser->position())
-        -> source   ($this->parser->input);
-    }
-
-    $left = $prefix->parse($this, $token);
-
-    while ($precedence < $this->getPrecedence()) {
-      $token = $this->parser->consumeAndFetch();
-      $infix = $this->parser->infixParseletForToken($token);
-      $left = $infix->parse($this, $left, $token);
-    }
-
-    return $left;
-  }
-
-  private function getPrecedence()
-  {
-    $parser = $this->parser->infixParseletForToken($this->parser->lookahead);
-    return !is_null($parser)
-      ? $parser->getPrecedence()
-      : 0;
-  }
-
-  /* Coproductions */
-  function qualifiedName()
-  {
-    $symbol_pointers = [$this->parser->match(Tag::T_IDENT)];
-    while ($this->parser->is('.')) {
-      $this->parser->consume();
-      $symbol_pointers[] = $this->parser->match(Tag::T_IDENT);
-    }
-
-    return array_map(function($name) {
-      return $this->parser->resolveScope($name);
-    }, $symbol_pointers);
-  }
-
-  function identifier()
-  {
-    return $this->parser->resolveScope($this->parser->match(Tag::T_IDENT));
-  }
 }

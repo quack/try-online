@@ -7,6 +7,11 @@ var QuackRepl = (function () {
 
   QuackRepl.prototype.configureStdin = function () {
     var that = this;
+
+    document.onclick = function () {
+      that.stdin.click();
+    }
+
     this.stdin.onclick = function () {
       that.input.focus();
       that.input.selectionStart = that.input.selectionEnd = that.input.value.length;
